@@ -65,7 +65,9 @@ def transform(df: DataFrame) -> DataFrame:
         .selectExpr('value.*', '*')
         .dropDuplicates(['restaurant_id', 'adv_campaign_id'])
         .withWatermark('timestamp', '5 minute')
-        .filter(col('adv_campaign_datetime_end') > unix_timestamp(current_timestamp()))
+        .filter((col('adv_campaign_datetime_end') > unix_timestamp(current_timestamp())) &
+                (col('adv_campaign_datetime_start') < unix_timestamp(current_timestamp()))
+        )
     )
 
     return filtered_read_stream_df
@@ -76,6 +78,8 @@ def read_from_postgres(spark: SparkSession) -> DataFrame:
         .options(**POSTGRES_SECURITY_OPTIONS)
         .option('dbtable', 'subscribers_restaurants')
         .load()
+        .select('restaurant_id', 'client_id')
+        .distinct()
     )
 
     return subscribers_restaurant_df
@@ -97,7 +101,7 @@ def foreach_batch_function(df, epoch_id) -> None:
     )
 
     (perst_df
-        .withColumn('feedback', lit(""))
+        .withColumn('feedback', lit(None))
         .write
         .format('jdbc')
         .options(**POSTGRES_SECURITY_OPTIONS)
